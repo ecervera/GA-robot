@@ -1,97 +1,148 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Apr 23 15:46:33 2013
+Created on Mon Feb 28 11:00:00 2022
 
 @author: robinlab
 """
 
-import math, time
-from fit import sinfun, A, T, phi, K
-from naoqi import ALProxy
-from scipy import linspace, pi
+from controller import Robot
 
-class Nao:
+from fit import sinfun, A, T, phi, K
+from numpy import linspace
+import math
+
+class Nao (Robot):
+    PHALANX_MAX = 8
     
     def __init__(self):
-        self.IP = "localhost"  # Replace here with your NaoQi's IP address.
-        self.PORT = 9559
-        self.bmanager = ALProxy("ALBehaviorManager", self.IP, self.PORT)
-        self.poseProxy = ALProxy("ALRobotPose", self.IP, self.PORT)
-        self.motionProxy = ALProxy("ALMotion", self.IP, self.PORT)
-        self.memProxy = ALProxy("ALMemory",self.IP,self.PORT)
-    
-    def stand_up(self):
-        if (self.bmanager.isBehaviorRunning('stand_up')):
-            self.bmanager.stopBehavior('stand_up')
-            time.sleep(1.0)
-        self.bmanager.runBehavior('stand_up')
-
-    def getActualPose(self):
-        pose, elapsedTime = self.poseProxy.getActualPoseAndTime()
-        return pose
+        Robot.__init__(self)
+        self.findAndEnableDevices()
         
-    def initCrawling(self):
-        proxy = self.motionProxy
-        proxy.setStiffnesses("Body", 1.0)
-        proxy.setAngles(['LShoulderPitch','RShoulderPitch'], [-0.25, -0.25], 0.5)
-        time.sleep(3)
-        proxy.setAngles(['LAnklePitch','RAnklePitch'], [-0.75, -0.75], 0.2)
-        time.sleep(3)
-        proxy.setStiffnesses("Body", 1.0)
-        names = ['HeadYaw', 'HeadPitch', 'LShoulderPitch', 'LShoulderRoll', 
-          'LElbowYaw', 'LElbowRoll', 'LWristYaw', 'LHand', 
+    def setJoints(self, joints, values):
+        for i in range(len(joints)):
+            getattr(self, joints[i]).setPosition(values[i])
+            
+    def steps(self, n):
+        for _ in range(n):
+            self.step(self.timeStep)
+         
+    def findAndEnableDevices(self):
+        # get the time step of the current world.
+        self.timeStep = int(self.getBasicTimeStep())
+
+        # camera
+        self.cameraTop = self.getDevice("CameraTop")
+        self.cameraBottom = self.getDevice("CameraBottom")
+        self.cameraTop.enable(4 * self.timeStep)
+        self.cameraBottom.enable(4 * self.timeStep)
+
+        # accelerometer
+        self.accelerometer = self.getDevice('accelerometer')
+        self.accelerometer.enable(4 * self.timeStep)
+
+        # gyro
+        self.gyro = self.getDevice('gyro')
+        self.gyro.enable(4 * self.timeStep)
+
+        # gps
+        self.gps = self.getDevice('gps')
+        self.gps.enable(4 * self.timeStep)
+
+        # inertial unit
+        self.inertialUnit = self.getDevice('inertial unit')
+        self.inertialUnit.enable(self.timeStep)
+
+        # ultrasound sensors
+        self.us = []
+        usNames = ['Sonar/Left', 'Sonar/Right']
+        for i in range(0, len(usNames)):
+            self.us.append(self.getDevice(usNames[i]))
+            self.us[i].enable(self.timeStep)
+
+        # foot sensors
+        self.fsr = []
+        fsrNames = ['LFsr', 'RFsr']
+        for i in range(0, len(fsrNames)):
+            self.fsr.append(self.getDevice(fsrNames[i]))
+            self.fsr[i].enable(self.timeStep)
+
+        # foot bumpers
+        self.lfootlbumper = self.getDevice('LFoot/Bumper/Left')
+        self.lfootrbumper = self.getDevice('LFoot/Bumper/Right')
+        self.rfootlbumper = self.getDevice('RFoot/Bumper/Left')
+        self.rfootrbumper = self.getDevice('RFoot/Bumper/Right')
+        self.lfootlbumper.enable(self.timeStep)
+        self.lfootrbumper.enable(self.timeStep)
+        self.rfootlbumper.enable(self.timeStep)
+        self.rfootrbumper.enable(self.timeStep)
+
+        # there are 7 controlable LED groups in Webots
+        self.leds = []
+        self.leds.append(self.getDevice('ChestBoard/Led'))
+        self.leds.append(self.getDevice('RFoot/Led'))
+        self.leds.append(self.getDevice('LFoot/Led'))
+        self.leds.append(self.getDevice('Face/Led/Right'))
+        self.leds.append(self.getDevice('Face/Led/Left'))
+        self.leds.append(self.getDevice('Ears/Led/Right'))
+        self.leds.append(self.getDevice('Ears/Led/Left'))
+
+        # get phalanx motor tags
+        # the real Nao has only 2 motors for RHand/LHand
+        # but in Webots we must implement RHand/LHand with 2x8 motors
+        self.lphalanx = []
+        self.rphalanx = []
+        self.maxPhalanxMotorPosition = []
+        self.minPhalanxMotorPosition = []
+        for i in range(0, self.PHALANX_MAX):
+            self.lphalanx.append(self.getDevice("LPhalanx%d" % (i + 1)))
+            self.rphalanx.append(self.getDevice("RPhalanx%d" % (i + 1)))
+
+            # assume right and left hands have the same motor position bounds
+            self.maxPhalanxMotorPosition.append(self.rphalanx[i].getMaxPosition())
+            self.minPhalanxMotorPosition.append(self.rphalanx[i].getMinPosition())
+
+        jointNames = ['HeadYaw', 'HeadPitch', 'LShoulderPitch', 'LShoulderRoll', 
+          'LElbowYaw', 'LElbowRoll', 'LWristYaw', 
           'LHipYawPitch', 'LHipRoll', 'LHipPitch', 'LKneePitch', 
           'LAnklePitch', 'LAnkleRoll', 'RHipYawPitch', 'RHipRoll', 
           'RHipPitch', 'RKneePitch', 'RAnklePitch', 'RAnkleRoll', 
           'RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 
-          'RWristYaw', 'RHand']
-        posture = [0.0, -0.7, -0.25, 0.1, -1.58, -0.1, 0.0, 0.0,
+          'RWristYaw']
+        for joint in jointNames:
+            setattr(self, joint, self.getDevice(joint))
+
+    def initCrawling(self):
+        self.setJoints(["RShoulderPitch", "LShoulderPitch"], [-0.25, -0.25])
+        self.steps(50)
+
+        self.setJoints(["RAnklePitch", "LAnklePitch"], [-0.75, -0.75])
+        self.steps(50)
+        
+        joints = ['HeadYaw', 'HeadPitch', 'LShoulderPitch', 'LShoulderRoll', 
+          'LElbowYaw', 'LElbowRoll', 'LWristYaw', 
+          'LHipYawPitch', 'LHipRoll', 'LHipPitch', 'LKneePitch', 
+          'LAnklePitch', 'LAnkleRoll', 'RHipYawPitch', 'RHipRoll', 
+          'RHipPitch', 'RKneePitch', 'RAnklePitch', 'RAnkleRoll', 
+          'RShoulderPitch', 'RShoulderRoll', 'RElbowYaw', 'RElbowRoll', 
+          'RWristYaw']
+        posture = [0.0, -0.67, -0.25, 0.1, -1.58, -0.1, 0.0,
                    -0.4, 0.2437, -0.825, 1.8, 0.75, 0.68, -0.4, -0.2437,
                    -0.825, 1.8, 0.75, -0.68, -0.25, -0.1, 1.58, 0.1,
-                   0.0, 0.0]
-        proxy.setAngles(names, posture, 0.2);
-        time.sleep(3)
-        proxy.setAngles(['LShoulderPitch','RShoulderPitch'], [0.21, 0.21], 1.0)
-        time.sleep(3)
+                   0.0]
+        self.setJoints(joints, posture)
+        self.steps(50)
+
+        self.setJoints(["RShoulderPitch", "LShoulderPitch"], [0.21, 0.21])
+        self.steps(50)
         
     def crawl(self, params, seconds=5):
-        proxy = self.motionProxy
-        proxy.setStiffnesses("Body", 1.0)
+        joints = ["LShoulderPitch","RShoulderPitch",
+                  "LShoulderRoll","RShoulderRoll",
+                  "LElbowRoll","RElbowRoll",
+                  "LKneePitch","RKneePitch",
+                  "LHipPitch","RHipPitch",
+                  "LHipRoll","RHipRoll",]
         
-        names = ["LShoulderPitch","RShoulderPitch",
-                 "LShoulderRoll","RShoulderRoll",
-                 "LElbowRoll","RElbowRoll",
-                 "LKneePitch","RKneePitch",
-                 "LHipPitch","RHipPitch",
-                 "LHipRoll","RHipRoll",]
-        
-        # PARAMETERS
-#        period = 1.28
-#        
-#        shoulderPitchA = 0.1
-#        shoulderPitchK = 0.21
-#        shoulderPitchPhi = 0.
-#        
-#        shoulderRollA = 0.035
-#        shoulderRollK = 0.039
-#        shoulderRollPhi = -2.
-#        
-#        hipPitchA = 0.12
-#        hipPitchK = -0.86
-#        hipPitchPhi = pi
-#        
-#        hipRollA = 0.06
-#        hipRollK = 0.33
-#        hipRollPhi = pi/2
-#        
-#        elbowRollA = 0.005
-#        elbowRollK = -0.11
-#        elbowRollPhi = -2.
-#        
-#        kneePitchA = 0.008
-#        kneePitchK = 1.8
-#        kneePitchPhi = 0.
-
         period = params[0]
         
         shoulderPitchA = params[1]
@@ -118,102 +169,86 @@ class Nao:
         kneePitchK = params[17]
         kneePitchPhi = params[18]        
 
-        #cycles = 10
         cycles = seconds / period
         sampercyc = 20
-        t = linspace(period,period*(cycles+1),sampercyc*cycles)
+        t = linspace(period,period*(cycles+1),int(sampercyc*cycles))
         timeList = t.tolist()
-        isAbsolute = True
         
         T.set(period)
         
         A.set(shoulderPitchA)
         phi.set(shoulderPitchPhi)
         K.set(shoulderPitchK)
-        LSP = sinfun(t)
+        LSP = sinfun(t).tolist()
         
         A.set(shoulderPitchA)
-        phi.set(shoulderPitchPhi+pi)
+        phi.set(shoulderPitchPhi+math.pi)
         K.set(shoulderPitchK)
-        RSP = sinfun(t)
+        RSP = sinfun(t).tolist()
         
         A.set(shoulderRollA)
         phi.set(shoulderRollPhi)
         K.set(shoulderRollK)
-        LSR = sinfun(t)
+        LSR = sinfun(t).tolist()
         
         A.set(shoulderRollA)
         phi.set(shoulderRollPhi)
         K.set(-shoulderRollK)
-        RSR = sinfun(t)
+        RSR = sinfun(t).tolist()
         
         A.set(elbowRollA)
         phi.set(elbowRollPhi)
         K.set(elbowRollK)
-        LER = sinfun(t)
+        LER = sinfun(t).tolist()
         
         A.set(elbowRollA)
         phi.set(elbowRollPhi)
         K.set(-elbowRollK)
-        RER = sinfun(t)
+        RER = sinfun(t).tolist()
         
         A.set(kneePitchA)
         phi.set(kneePitchPhi)
         K.set(kneePitchK)
-        LKP = sinfun(t)
+        LKP = sinfun(t).tolist()
         
         A.set(kneePitchA)
-        phi.set(kneePitchPhi+pi)
+        phi.set(kneePitchPhi+math.pi)
         K.set(kneePitchK)
-        RKP = sinfun(t)
+        RKP = sinfun(t).tolist()
         
         A.set(hipPitchA)
         phi.set(hipPitchPhi)
         K.set(hipPitchK)
-        LHP = sinfun(t)
+        LHP = sinfun(t).tolist()
         
         A.set(hipPitchA)
-        phi.set(hipPitchPhi+pi)
+        phi.set(hipPitchPhi+math.pi)
         K.set(hipPitchK)
-        RHP = sinfun(t)
+        RHP = sinfun(t).tolist()
         
         A.set(hipRollA)
         phi.set(hipRollPhi)
         K.set(hipRollK)
-        LHR = sinfun(t)
+        LHR = sinfun(t).tolist()
         
         A.set(hipRollA)
         phi.set(hipRollPhi)
         K.set(-hipRollK)
-        RHR = sinfun(t)
+        RHR = sinfun(t).tolist()
         
-        xi = self.memProxy.getData("Simulator/TorsoPosition/X")
-        yi = self.memProxy.getData("Simulator/TorsoPosition/Y")
-        zi = self.memProxy.getData("Simulator/TorsoPosition/Z")
-        #print "Robot Position before", (xi,yi,zi)
+        xi,yi,zi = self.gps.getValues()
         
         # Make the robot crawl
-        proxy.angleInterpolation(names, 
-                                 [LSP.tolist(), RSP.tolist(),
-                                  LSR.tolist(), RSR.tolist(),
-                                  LER.tolist(), RER.tolist(),
-                                  LKP.tolist(), RKP.tolist(),
-                                  LHP.tolist(), RHP.tolist(),
-                                  LHR.tolist(), RHR.tolist()], 
-                                 [timeList, timeList, timeList, 
-                                  timeList, timeList, timeList, 
-                                  timeList, timeList, timeList, 
-                                  timeList, timeList, timeList], 
-                                 isAbsolute)
-        
-        xf = self.memProxy.getData("Simulator/TorsoPosition/X")
-        yf = self.memProxy.getData("Simulator/TorsoPosition/Y")
-        zf = self.memProxy.getData("Simulator/TorsoPosition/Z")
-        #print "Robot Position after", (xf,yf,zf)
+        for i in range(len(timeList)):
+            posture = [LSP[i], RSP[i], LSR[i], RSR[i], LER[i], RER[i],
+                       LKP[i], RKP[i], LHP[i], RHP[i], LHR[i], RHR[i]]
+            self.setJoints(joints, posture)
+            self.steps(3)
+
+        xf,yf,zf = self.gps.getValues()
         
         dx = xf-xi
         dy = yf-yi
         dz = zf-zi
         distance = math.sqrt(dx*dx+dy*dy+dz*dz)
-        #print "Distance: %.3f" % distance
         return distance

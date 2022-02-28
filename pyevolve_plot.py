@@ -12,7 +12,7 @@ def graph_pop_heatmap_raw(pop, identify, minimize=False, colormap="jet", filesav
 
    if filesave:
       pylab.savefig(filesave)
-      print "Graph saved to %s file !" % (filesave,)
+      print ("Graph saved to %s file !" % (filesave,))
    else:
       pylab.show()
 
@@ -72,7 +72,7 @@ def graph_diff_raw(pop, identify, minimize=False, filesave=None):
 
    if filesave:
       pylab.savefig(filesave)
-      print "Graph saved to %s file !" % (filesave,)
+      print ("Graph saved to %s file !" % (filesave,))
    else:
       pylab.show()
 
@@ -100,7 +100,7 @@ def graph_errorbars_raw(pop, identify, minimize=False, filesave=None):
 
     if filesave:
         pylab.savefig(filesave)
-        print "Graph saved to %s file !" % (filesave,)
+        print ("Graph saved to %s file !" % (filesave,))
     else:
         pylab.show()
         
@@ -129,7 +129,7 @@ def graph_errorbars_fitness(pop, identify, minimize=False, filesave=None):
 
    if filesave:
       pylab.savefig(filesave)
-      print "Graph saved to %s file !" % (filesave,)
+      print ("Graph saved to %s file !" % (filesave,))
    else:
       pylab.show()
 
@@ -199,7 +199,7 @@ def graph_maxmin_raw(pop, identify, minimize=False, filesave=None):
 
    if filesave:
       pylab.savefig(filesave)
-      print "Graph saved to %s file !" % (filesave,)
+      print ("Graph saved to %s file !" % (filesave,))
    else:
       pylab.show()
 
@@ -246,7 +246,7 @@ def graph_maxmin_fitness(pop, identify, minimize=False, filesave=None):
 
    if filesave:
       pylab.savefig(filesave)
-      print "Graph saved to %s file !" % (filesave,)
+      print ("Graph saved to %s file !" % (filesave,))
    else:
       pylab.show()
 
@@ -255,11 +255,11 @@ def load_population(dbfile, identify):
 
     import os.path
     if not os.path.exists(dbfile):
-        print "Database file '%s' not found !" % (dbfile, )
+        print ("Database file '%s' not found !" % (dbfile, ))
         return pop
 
     import sqlite3
-    print "Loading database..."
+    print ("Loading database...")
 
     conn = sqlite3.connect(dbfile)
     conn.row_factory = sqlite3.Row
@@ -270,10 +270,10 @@ def load_population(dbfile, identify):
     conn.close()
 
     if len(pop) <= 0:
-        print "No statistic data found for the identify '%s' !" % (identify,)
+        print ("No statistic data found for the identify '%s' !" % (identify,))
         return pop
 
-    print "%d generations found !" % (len(pop),)
+    print ("%d generations found !" % (len(pop),))
     return pop
 
 def load_population_hm(dbfile, identify):
@@ -281,11 +281,11 @@ def load_population_hm(dbfile, identify):
 
     import os.path
     if not os.path.exists(dbfile):
-        print "Database file '%s' not found !" % (dbfile, )
+        print ("Database file '%s' not found !" % (dbfile, ))
         return pop
 
     import sqlite3
-    print "Loading database..."
+    print ("Loading database...")
     
     conn = sqlite3.connect(dbfile)
     conn.row_factory = sqlite3.Row
@@ -293,7 +293,7 @@ def load_population_hm(dbfile, identify):
     ret = c.execute("select distinct generation from population where identify = ?", (identify,))
     generations = ret.fetchall()
     if len(generations) <= 0:
-        print "No generation data found for the identify '%s' !" % (identify,)
+        print ("No generation data found for the identify '%s' !" % (identify,))
         return pop
     
     pop = []
@@ -314,10 +314,10 @@ def load_population_hm(dbfile, identify):
     conn.close()
 
     if len(pop) <= 0:
-        print "No statistic data found for the identify '%s' !" % (identify,)
+        print ("No statistic data found for the identify '%s' !" % (identify,))
         return pop
 
-    print "%d generations found !" % (len(pop),)
+    print ("%d generations found !" % (len(pop),))
     return pop
     
 def plot_errorbars_raw(dbfile, identify):
